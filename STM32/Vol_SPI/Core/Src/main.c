@@ -30,7 +30,7 @@
 /* USER CODE BEGIN PTD */
 #define RING_SIZE        640
 #define FRAME_SAMPLES   50
-#define FRAME_BYTES     (5 + FRAME_SAMPLES * 2)
+#define FRAME_BYTES     (1 + FRAME_SAMPLES * 2)
 uint16_t adc_dma_buf[1];
 /* ring buffer ADC */
 volatile uint16_t ring[RING_SIZE];
@@ -43,16 +43,8 @@ volatile uint8_t spi_done = 0;
 
 uint8_t rx[FRAME_BYTES];
 
-uint8_t tx_buf0[FRAME_BYTES];
-uint8_t tx_buf1[FRAME_BYTES];
+uint8_t tx[FRAME_BYTES];
 
-uint8_t *tx_active = tx_buf0;   // SPI đang dùng
-uint8_t *tx_build  = tx_buf1;   // STM đang build
-
-static uint32_t frame_id = 0;
-
-
-volatile uint8_t start_adc = 0;
 volatile uint32_t ring_overwrite = 0;
 
 /* USER CODE END PTD */
@@ -99,8 +91,10 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   UNUSED(GPIO_Pin);
   if(GPIO_Pin == GPIO_PIN_0)
   	  {
+  	  HAL_ADCEx_Calibration_Start(&hadc);
+  	  HAL_ADC_Start_DMA(&hadc, (uint32_t*)adc_dma_buf, 1);
+  	  HAL_TIM_Base_Start(&htim1);
 
-	  	  start_adc = 1;
   	  }
 
 }
@@ -121,27 +115,20 @@ static inline void ring_push(uint16_t sample)
 static void build_tx_frame(void)
 {
     uint16_t idx = 1;
-
-    // frame_id (4 byte)
-    tx_build[idx++] = (uint8_t)(frame_id);
-    tx_build[idx++] = (uint8_t)(frame_id >> 8);
-    tx_build[idx++] = (uint8_t)(frame_id >> 16);
-    tx_build[idx++] = (uint8_t)(frame_id >> 24);
-
+    tx[0] = 1;
     // data
     for (int i = 0; i < FRAME_SAMPLES; i++) {
         uint16_t s = ring[tail];
         tail = (tail + 1) % RING_SIZE;
 
-        tx_build[idx++] = s & 0xFF;
-        tx_build[idx++] = s >> 8;
+        tx[idx++] = (uint8_t)(s & 0xFF);       // LSB
+        tx[idx++] = (uint8_t)((s >> 8) & 0xFF);// MSB
     }
 
     ring_count -= FRAME_SAMPLES;
-    frame_id++;
 
-    // VALID FLAG – SET CUỐI
-    tx_build[0] = 1;
+
+
 }
 
 
@@ -199,16 +186,11 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  if(start_adc){
-  	  HAL_ADCEx_Calibration_Start(&hadc);
-  	  HAL_ADC_Start_DMA(&hadc, (uint32_t*)adc_dma_buf, 1);
-  	  HAL_TIM_Base_Start(&htim1);
-  }
 
-  tx_buf0[0] = 0;
-  tx_buf1[0] = 0;
+  tx[0] = 0;
+
   /* ARM SPI SLAVE ONCE */
-  HAL_SPI_TransmitReceive_DMA(&hspi1, tx_active, rx, FRAME_BYTES);
+  HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, FRAME_BYTES);
 
   /* USER CODE END 2 */
 
@@ -217,24 +199,14 @@ int main(void)
   while (1)
   {
 	  if (spi_done) {
-	      spi_done = 0;
+	  	         spi_done = 0;
 
-	      // nếu SPI vừa xong và buffer build đã valid
-	      if (tx_build[0] == 1) {
-	          // swap buffer
-	          uint8_t *tmp = tx_active;
-	          tx_active = tx_build;
-	          tx_build  = tmp;
+	  	         if (ring_count >= FRAME_SAMPLES)
+	  	             build_tx_frame();
+	  	         else
+	  	             tx[0] = 0;
 
-	          tx_build[0] = 0;   // clear buffer build
-	      }
-
-	      // nếu còn đủ mẫu và buffer build rảnh → build frame mới
-	      if (ring_count >= FRAME_SAMPLES && tx_build[0] == 0) {
-	          build_tx_frame();
-	      }
-
-	      HAL_SPI_TransmitReceive_DMA(&hspi1, tx_active, rx, FRAME_BYTES);
+	  	         HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, FRAME_BYTES);
 	  }
 
     /* USER CODE END WHILE */

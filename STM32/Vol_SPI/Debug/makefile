@@ -61,8 +61,8 @@ all: main-build
 main-build: Vol_SPI.elf secondary-outputs
 
 # Tool invocations
-Vol_SPI.elf: $(OBJS) $(USER_OBJS) D:\STM32\Vol_SPI\STM32F030F4PX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Vol_SPI.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0 -T"D:\STM32\Vol_SPI\STM32F030F4PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Vol_SPI.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Vol_SPI.elf: $(OBJS) $(USER_OBJS) D:\GITGUB\Firm_Power\STM32\Vol_SPI\STM32F030F4PX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Vol_SPI.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0 -T"D:\GITGUB\Firm_Power\STM32\Vol_SPI\STM32F030F4PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Vol_SPI.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
