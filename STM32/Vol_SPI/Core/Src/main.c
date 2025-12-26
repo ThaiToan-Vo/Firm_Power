@@ -24,6 +24,8 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -38,7 +40,7 @@ volatile uint16_t head = 0;
 volatile uint16_t tail = 0;
 volatile uint16_t ring_count = 0;
 
-volatile uint8_t spi_done = 0;
+volatile uint8_t spi_idle = 1;
 /* SPI buffers (8-bit) */
 
 uint8_t rx[FRAME_BYTES];
@@ -101,35 +103,33 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 static inline void ring_push(uint16_t sample)
 {
+    uint16_t next = head + 1;
+    if (next >= RING_SIZE) next = 0;
+
     ring[head] = sample;
-    head = (head + 1) % RING_SIZE;
+    head = next;
 
     if (ring_count < RING_SIZE) {
         ring_count++;
     } else {
-        tail = (tail + 1) % RING_SIZE;
+        tail++;
+        if (tail >= RING_SIZE) tail = 0;
         ring_overwrite++;
     }
 }
 
-static void build_tx_frame(void)
+static inline bool ring_pop(uint16_t *out)
 {
-    uint16_t idx = 1;
-    tx[0] = 1;
-    // data
-    for (int i = 0; i < FRAME_SAMPLES; i++) {
-        uint16_t s = ring[tail];
-        tail = (tail + 1) % RING_SIZE;
-
-        tx[idx++] = (uint8_t)(s & 0xFF);       // LSB
-        tx[idx++] = (uint8_t)((s >> 8) & 0xFF);// MSB
-    }
-
-    ring_count -= FRAME_SAMPLES;
-
-
-
+    if (ring_count == 0) return false;
+    *out = ring[tail];
+    tail++;
+    if (tail >= RING_SIZE) tail = 0;
+    ring_count--;
+    return true;
 }
+
+
+
 
 
 
@@ -143,7 +143,16 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi){
-	spi_done = 1;
+	 uint16_t s;
+	 if (ring_pop(&s)) {
+		 tx[0] = (uint8_t)(s & 0xFF);
+		 tx[1] = (uint8_t)(s >> 8);
+	 }
+	 else {
+		 tx[0] = 0;
+		 tx[1] = 0;
+	 }
+	 HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, 2);
 
 }
 
@@ -190,7 +199,7 @@ int main(void)
   tx[0] = 0;
 
   /* ARM SPI SLAVE ONCE */
-  HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, FRAME_BYTES);
+  HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, 2);
 
   /* USER CODE END 2 */
 
@@ -198,16 +207,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if (spi_done) {
-	  	         spi_done = 0;
-
-	  	         if (ring_count >= FRAME_SAMPLES)
-	  	             build_tx_frame();
-	  	         else
-	  	             tx[0] = 0;
-
-	  	         HAL_SPI_TransmitReceive_DMA(&hspi1, tx, rx, FRAME_BYTES);
-	  }
 
     /* USER CODE END WHILE */
 
