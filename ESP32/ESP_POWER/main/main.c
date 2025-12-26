@@ -24,11 +24,7 @@
 
 #define I_ADC_RMS_NOISE  0.228f   // RMS ADC khi không tải (đã đo)
 #define I_SCALE         28.0f
-<<<<<<< Updated upstream
-
-=======
 esp_err_t ret;
->>>>>>> Stashed changes
 
 // #define V_GAIN    (820.0f / 5.6f)
 
@@ -45,21 +41,11 @@ static void spi_bus_init(void)
         .mosi_io_num = 23,
         .miso_io_num = 19,
         .sclk_io_num = 18,
-<<<<<<< Updated upstream
-        .max_transfer_sz = FRAME_BYTES,
-=======
         .max_transfer_sz = 32,
->>>>>>> Stashed changes
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
     };
 
-<<<<<<< Updated upstream
-    spi_bus_initialize(HSPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
-
-    spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 100000,
-=======
     ret = spi_bus_initialize(VSPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
     if (ret == ESP_OK) {
     printf("SPI bus init success: %d\n", ret);
@@ -67,18 +53,11 @@ static void spi_bus_init(void)
     }
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = 1000000,
->>>>>>> Stashed changes
         .mode = 0,
         .queue_size = 2,
     };
 
     devcfg.spics_io_num = 15; // STM voltage
-<<<<<<< Updated upstream
-    spi_bus_add_device(HSPI_HOST, &devcfg, &spi_v);
-
-    devcfg.spics_io_num = 14; // STM current
-    spi_bus_add_device(HSPI_HOST, &devcfg, &spi_i);
-=======
     ret = spi_bus_add_device(VSPI_HOST, &devcfg, &spi_v);
     if (ret == ESP_OK) {
     printf("Add device V success: %d\n", ret);
@@ -89,7 +68,6 @@ static void spi_bus_init(void)
     if (ret == ESP_OK) {
     printf("Add device I success: %d\n", ret);
     }
->>>>>>> Stashed changes
 }
 
 void Ex_ISR_Init(void){
@@ -109,29 +87,6 @@ static inline float adc_to_vin(uint16_t adc)
     return (adc * VREF) / ADC_MAX;
 }
 
-<<<<<<< Updated upstream
-static bool spi_read_frame(spi_device_handle_t dev, uint16_t *out)
-{
-    static uint8_t tx[FRAME_BYTES] = {0};
-    static uint8_t rx[FRAME_BYTES];
-
-    spi_transaction_t t = {
-        .length = FRAME_BYTES * 8,
-        .tx_buffer = tx,
-        .rx_buffer = rx
-    };
-
-    spi_device_transmit(dev, &t);
-
-    if (rx[0] != 1) return false;
-
-    for (int i = 0; i < FRAME_SAMPLES; i++) {
-        out[i] = rx[1 + 2*i] | (rx[2 + 2*i] << 8);
-    }
-    return true;
-}
-
-=======
 static bool spi_read_sample(spi_device_handle_t dev, uint16_t *out)
 {
     uint8_t tx[2] = {0, 0};
@@ -152,7 +107,6 @@ static bool spi_read_sample(spi_device_handle_t dev, uint16_t *out)
 
 
 
->>>>>>> Stashed changes
 typedef struct {
     float vrms;
 } frame_v_t;
@@ -280,17 +234,6 @@ void app_main(void)
     float p_acc = 0.0f;
     int   p_cnt = 0;
 
-<<<<<<< Updated upstream
-    while (1)
-{
-        /* ===== READ VOLTAGE ===== */
-    if (spi_read_frame(spi_v, v_buf)) {
-        frame_v_t v = process_v_frame(v_buf);
-        
-        v_acc += v.vrms;
-        v_cnt++;
-        v_ready = true;
-=======
     static int v_idx = 0;
     uint16_t sample_v;
     static int i_idx = 0;
@@ -314,7 +257,6 @@ void app_main(void)
             v_acc += v.vrms;
             v_cnt++;
         
->>>>>>> Stashed changes
         if (v_cnt >= AVG_FRAMES) {
             printf("Vrms = %.2f V \n ",
                    v_acc / v_cnt);
@@ -322,32 +264,6 @@ void app_main(void)
             v_cnt = 0;
         }
     }
-<<<<<<< Updated upstream
-    
-    /* delay frame-level */
-    vTaskDelay(pdMS_TO_TICKS(50));
-    /* ===== READ CURRENT ===== */
-    if (spi_read_frame(spi_i, i_buf)) {
-        frame_i_t i = process_i_frame(i_buf);
-        
-        i_acc += i.irms;
-        i_cnt++;
-        i_ready = true;
-        if (i_cnt >= AVG_FRAMES) {
-            printf("Irms = %.2f A\n", i_acc / i_cnt);
-            i_acc = 0.0f;
-            i_cnt = 0;
-        }
-    }
-    
-    /* delay nhỏ để nhả SPI + STM */
-    vTaskDelay(pdMS_TO_TICKS(50));
-
-
-
-    if (v_ready && i_ready) {
-    frame_p_t p = process_p_frame(v_buf, i_buf);
-=======
 }
     /* delay frame-level */
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -386,7 +302,6 @@ void app_main(void)
 
     if (p_idx == FRAME_SAMPLES) {
     frame_p_t p = process_p_frame(vp_buf, ip_buf);
->>>>>>> Stashed changes
 
     p_acc += p.p;
     p_cnt++;
@@ -397,16 +312,9 @@ void app_main(void)
         p_cnt = 0;
     }
 
-<<<<<<< Updated upstream
-    v_ready = false;
-    i_ready = false;
-}
-
-=======
     p_idx = 0;
 }
      vTaskDelay(pdMS_TO_TICKS(10));
->>>>>>> Stashed changes
 }
 
 }
