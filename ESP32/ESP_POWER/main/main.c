@@ -24,7 +24,11 @@
 
 #define I_ADC_RMS_NOISE  0.228f   // RMS ADC khi không tải (đã đo)
 #define I_SCALE         28.0f
+<<<<<<< Updated upstream
 
+=======
+esp_err_t ret;
+>>>>>>> Stashed changes
 
 // #define V_GAIN    (820.0f / 5.6f)
 
@@ -41,24 +45,51 @@ static void spi_bus_init(void)
         .mosi_io_num = 23,
         .miso_io_num = 19,
         .sclk_io_num = 18,
+<<<<<<< Updated upstream
         .max_transfer_sz = FRAME_BYTES,
+=======
+        .max_transfer_sz = 32,
+>>>>>>> Stashed changes
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
     };
 
+<<<<<<< Updated upstream
     spi_bus_initialize(HSPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
 
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = 100000,
+=======
+    ret = spi_bus_initialize(VSPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (ret == ESP_OK) {
+    printf("SPI bus init success: %d\n", ret);
+    
+    }
+    spi_device_interface_config_t devcfg = {
+        .clock_speed_hz = 1000000,
+>>>>>>> Stashed changes
         .mode = 0,
         .queue_size = 2,
     };
 
     devcfg.spics_io_num = 15; // STM voltage
+<<<<<<< Updated upstream
     spi_bus_add_device(HSPI_HOST, &devcfg, &spi_v);
 
     devcfg.spics_io_num = 14; // STM current
     spi_bus_add_device(HSPI_HOST, &devcfg, &spi_i);
+=======
+    ret = spi_bus_add_device(VSPI_HOST, &devcfg, &spi_v);
+    if (ret == ESP_OK) {
+    printf("Add device V success: %d\n", ret);
+    
+    }
+    devcfg.spics_io_num = 14; // STM current
+    ret = spi_bus_add_device(VSPI_HOST, &devcfg, &spi_i);
+    if (ret == ESP_OK) {
+    printf("Add device I success: %d\n", ret);
+    }
+>>>>>>> Stashed changes
 }
 
 void Ex_ISR_Init(void){
@@ -78,6 +109,7 @@ static inline float adc_to_vin(uint16_t adc)
     return (adc * VREF) / ADC_MAX;
 }
 
+<<<<<<< Updated upstream
 static bool spi_read_frame(spi_device_handle_t dev, uint16_t *out)
 {
     static uint8_t tx[FRAME_BYTES] = {0};
@@ -99,6 +131,28 @@ static bool spi_read_frame(spi_device_handle_t dev, uint16_t *out)
     return true;
 }
 
+=======
+static bool spi_read_sample(spi_device_handle_t dev, uint16_t *out)
+{
+    uint8_t tx[2] = {0, 0};
+    uint8_t rx[2];
+
+    spi_transaction_t t = {
+        .length = 16,
+        .tx_buffer = tx,
+        .rx_buffer = rx,
+    };
+
+    esp_err_t ret = spi_device_transmit(dev, &t);
+    if (ret != ESP_OK) return false;
+
+    *out = rx[0] | (rx[1] << 8);
+    return true;
+}
+
+
+
+>>>>>>> Stashed changes
 typedef struct {
     float vrms;
 } frame_v_t;
@@ -226,6 +280,7 @@ void app_main(void)
     float p_acc = 0.0f;
     int   p_cnt = 0;
 
+<<<<<<< Updated upstream
     while (1)
 {
         /* ===== READ VOLTAGE ===== */
@@ -235,6 +290,31 @@ void app_main(void)
         v_acc += v.vrms;
         v_cnt++;
         v_ready = true;
+=======
+    static int v_idx = 0;
+    uint16_t sample_v;
+    static int i_idx = 0;
+    uint16_t sample_i;
+    static uint16_t vp_buf[FRAME_SAMPLES];
+    static uint16_t ip_buf[FRAME_SAMPLES];
+    static int p_idx = 0;
+
+    while (1)
+{
+        /* ===== READ VOLTAGE ===== */
+    if (spi_read_sample(spi_v, &sample_v)) {
+        v_buf[v_idx] = sample_v;
+        vp_buf[v_idx] = sample_v;
+        v_idx++;
+        v_ready = true;
+         if (v_idx == FRAME_SAMPLES) {
+            frame_v_t v = process_v_frame(v_buf);
+            v_idx = 0;
+        
+            v_acc += v.vrms;
+            v_cnt++;
+        
+>>>>>>> Stashed changes
         if (v_cnt >= AVG_FRAMES) {
             printf("Vrms = %.2f V \n ",
                    v_acc / v_cnt);
@@ -242,6 +322,7 @@ void app_main(void)
             v_cnt = 0;
         }
     }
+<<<<<<< Updated upstream
     
     /* delay frame-level */
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -266,6 +347,46 @@ void app_main(void)
 
     if (v_ready && i_ready) {
     frame_p_t p = process_p_frame(v_buf, i_buf);
+=======
+}
+    /* delay frame-level */
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    /* ===== READ CURRENT ===== */
+    if (spi_read_sample(spi_i, &sample_i)) {
+        i_buf[i_idx] = sample_i;
+        ip_buf[i_idx] = sample_i;
+        i_idx++;
+        i_ready = true;
+         if (i_idx == FRAME_SAMPLES) {
+            frame_i_t i = process_i_frame(i_buf);
+            
+            i_acc += i.irms;
+            i_cnt++;
+            
+            if (i_cnt >= AVG_FRAMES) {
+                printf("Irms = %.2f A\n", i_acc / i_cnt);
+                i_acc = 0.0f;
+                i_cnt = 0;
+        }
+    }
+}
+    /* delay nhỏ để nhả SPI + STM */
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    if (v_ready && i_ready) {
+        if(p_idx < FRAME_SAMPLES){
+            p_idx++;
+        }
+    
+    v_ready = false;
+    i_ready = false;
+}
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    if (p_idx == FRAME_SAMPLES) {
+    frame_p_t p = process_p_frame(vp_buf, ip_buf);
+>>>>>>> Stashed changes
 
     p_acc += p.p;
     p_cnt++;
@@ -276,10 +397,16 @@ void app_main(void)
         p_cnt = 0;
     }
 
+<<<<<<< Updated upstream
     v_ready = false;
     i_ready = false;
 }
 
+=======
+    p_idx = 0;
+}
+     vTaskDelay(pdMS_TO_TICKS(10));
+>>>>>>> Stashed changes
 }
 
 }
